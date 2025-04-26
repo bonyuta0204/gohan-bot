@@ -1,10 +1,9 @@
 // handle_message.ts
 // Pure function to generate a reply using LLM, matching logic in slack_mentions/postReply
 
-import OpenAI from "npm:openai";
 import { chatCompletion } from "./ai.ts";
 import type { SupabaseClient } from "jsr:@supabase/supabase-js@2";
-import { ChatCompletionFunctionMessageParam } from "npm:openai";
+import { getToolSchema, toolHandlers } from "./tools/index.ts";
 
 export type HandleMessageRequest = {
   userMessage: string;
@@ -56,29 +55,21 @@ export async function handleMessage(
       console.log("Tool call:", name, argsJson);
       const args = JSON.parse(argsJson || "{}");
       let functionResult: unknown;
-      if (name === "add_fridge_item") {
-        await supabase
-          .from("fridge_items")
-          .insert({ item_name: args.item_name });
-        functionResult = {
-          status: "success",
-          detail: `Added ${args.item_name}`,
-        };
-      } else if (name === "record_meal") {
-        await supabase
-          .from("meal_logs")
-          .insert({ meal_name: args.meal_name });
-        functionResult = {
-          status: "success",
-          detail: `Recorded meal ${args.meal_name}`,
-        };
-      } else if (name === "fetch_recent_items") {
-        const { data } = await supabase
-          .from("fridge_items")
-          .select("item_name,added_at")
-          .order("added_at", { ascending: false })
-          .limit(args.limit || 5);
-        functionResult = { items: data };
+      if (name in toolHandlers) {
+        try {
+          functionResult = await toolHandlers[name as keyof typeof toolHandlers](
+            supabase,
+            args,
+          );
+        } catch (toolError) {
+          console.error("Tool handler error:", toolError);
+          functionResult = {
+            status: "error",
+            detail: `Tool '${name}' failed: ${toolError instanceof Error ? toolError.message : String(toolError)}`,
+          };
+        }
+      } else {
+        functionResult = { status: "error", detail: `Unknown tool: ${name}` };
       }
       // Second LLM call with function result
       const toolMsg = {
@@ -101,58 +92,4 @@ export async function handleMessage(
       error: (err instanceof Error ? err.message : String(err)),
     };
   }
-}
-
-// Tool schemas for function calling
-function getToolSchema(): OpenAI.Chat.Completions.ChatCompletionTool[] {
-  return [
-    {
-      type: "function",
-      function: {
-        name: "add_fridge_item",
-        description: "Add an item to the user's fridge",
-        parameters: {
-          type: "object",
-          properties: {
-            item_name: {
-              type: "string",
-              description: "Name of the item to add",
-            },
-          },
-          required: ["item_name"],
-        },
-      },
-    },
-    {
-      type: "function",
-      function: {
-        name: "record_meal",
-        description: "Record a meal eaten by the user",
-        parameters: {
-          type: "object",
-          properties: {
-            meal_name: { type: "string", description: "Name of the meal" },
-          },
-          required: ["meal_name"],
-        },
-      },
-    },
-    {
-      type: "function",
-      function: {
-        name: "fetch_recent_items",
-        description: "Fetch recently added fridge items for the user",
-        parameters: {
-          type: "object",
-          properties: {
-            limit: {
-              type: "integer",
-              description: "Max number of items to fetch",
-            },
-          },
-          required: [],
-        },
-      },
-    },
-  ];
 }
