@@ -15,7 +15,7 @@ const bot_client = new WebClient(slack_bot_token);
 
 Deno.serve(async (req) => {
   try {
-    const _supabase = createClient(
+    const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_ANON_KEY") ?? "",
       {
@@ -73,7 +73,20 @@ async function postReply(
 ): Promise<void> {
   console.log(`Generating response to user message: ${userMessage}`);
   try {
-    const { reply, error } = await handleMessage({ userMessage });
+    // Create supabase client for each background task
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+      {
+        global: {
+          headers: {
+            Authorization: "Bearer " +
+              (Deno.env.get("SUPABASE_ANON_KEY") ?? ""),
+          },
+        },
+      },
+    );
+    const { reply, error } = await handleMessage({ userMessage }, supabase);
     if (error || !reply) {
       throw new Error(error || "Failed to get response from LLM");
     }
