@@ -1,7 +1,7 @@
 // handle_message.ts
 // Pure function to generate a reply using LLM, matching logic in slack_mentions/postReply
 
-import { chatCompletion } from "./ai.ts";
+import { buildOpenAIClient, chatCompletion } from "./client.ts";
 import type { SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import { getToolSchema, toolHandlers } from "./tools/index.ts";
 import { SYSTEM_PROMPT } from "./prompt.ts";
@@ -15,6 +15,8 @@ export type HandleMessageResponse = {
   reply: string;
   error?: string;
 };
+
+const client = buildOpenAIClient();
 
 /**
  * Generates a reply to a user message using the LLM (OpenAI).
@@ -56,52 +58,35 @@ async function getFridgeContextMessage(
   return { role: "assistant", content: "" };
 }
 
-// Helper: Execute tool calls and collect results/messages
-async function executeToolCalls(
-  toolCalls: any[],
+async function executeToolCall(
+  toolCall: OpenAI.Responses.ResponseFunctionToolCall,
   supabase: SupabaseClient,
-): Promise<OpenAI.Chat.Completions.ChatCompletionMessageParam[]> {
-  const toolResults: Record<string, unknown> = {};
-  const toolMsgs: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
-  for (const toolCall of toolCalls) {
-    const name = toolCall.function.name;
-    let args: any = {};
-    try {
-      args = JSON.parse(toolCall.function.arguments || "{}");
-    } catch {
-      args = {};
-    }
-    let result: unknown;
-    if (name in toolHandlers) {
-      try {
-        result = await toolHandlers[name as keyof typeof toolHandlers](
-          supabase,
-          args,
-        );
-        console.log(`Function result for ${name}:`, result);
-      } catch (toolError) {
-        console.error(`Tool handler error for ${name}:`, toolError);
-        result = {
-          status: "error",
-          detail: `Tool '${name}' failed: ` +
-            (toolError instanceof Error
-              ? toolError.message
-              : String(toolError)),
-        };
-      }
-    } else {
-      result = { status: "error", detail: `Unknown tool: ${name}` };
-    }
-    toolResults[name] = result;
-    toolMsgs.push({
-      role: "tool",
-      tool_call_id: toolCall.id,
-      content: JSON.stringify(result),
-    });
+): Promise<OpenAI.Responses.ResponseInputItem.FunctionCallOutput> {
+  const name = toolCall.name;
+  const parsedArgs = JSON.parse(toolCall.arguments || "{}");
+
+  if (!(name in toolHandlers)) {
+    return {
+      call_id: toolCall.call_id,
+      output: `Unknown tool: ${name}`,
+      type: "function_call_output",
+    };
   }
-  return toolMsgs;
+  const handler = toolHandlers[name as keyof typeof toolHandlers];
+  const result = await handler(supabase, parsedArgs);
+  return {
+    call_id: toolCall.call_id,
+    output: JSON.stringify(result),
+    type: "function_call_output",
+  };
 }
 
+/**
+ * Main function to handle a user message.
+ * @param req Message request
+ * @param supabase Supabase client
+ * @returns HandleMessageResponse
+ */
 export async function handleMessage(
   req: HandleMessageRequest,
   supabase: SupabaseClient,
@@ -126,30 +111,30 @@ export async function handleMessage(
 
     console.log("Messages before LLM:", messages);
     // First LLM call with function schema
-    const firstResp = await chatCompletion({
+    const firstResp = await client.responses.create({
       model: "gpt-4.1-nano",
-      messages,
+      input: messages,
       tools,
       tool_choice: "auto",
     });
     console.log("First LLM response:", firstResp);
-    const choice = firstResp.choices[0];
+    const output = firstResp.output[0];
     let finalText: string;
 
     // --- Tool call execution ---
-    if (choice.message?.tool_calls?.length) {
-      const toolMsgs = await executeToolCalls(
-        choice.message.tool_calls,
+    if (output.type === "function_call") {
+      const toolMsgs = await executeToolCall(
+        output,
         supabase,
       );
       // Second LLM call with all tool results (if any)
-      const secondResp = await chatCompletion({
+      const secondResp = await client.responses.create({
         model: "gpt-4.1-nano",
-        messages: [systemMsg, userMsg, choice.message, ...toolMsgs],
+        input: [systemMsg, userMsg, output, toolMsgs],
       });
-      finalText = secondResp.choices[0]?.message?.content || "(No response)";
+      finalText = secondResp.output_text || "(No response)";
     } else {
-      finalText = choice.message?.content || "(No response)";
+      finalText = firstResp.output_text || "(No response)";
     }
     return { reply: finalText };
   } catch (err) {

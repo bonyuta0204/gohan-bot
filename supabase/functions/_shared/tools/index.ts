@@ -11,105 +11,99 @@ export const toolHandlers = {
   delete_fridge_item: deleteFridgeItem,
 };
 
-export function getToolSchema(): OpenAI.Chat.Completions.ChatCompletionTool[] {
+export function getToolSchema(): OpenAI.Responses.Tool[] {
   return [
     {
       type: "function",
-      function: {
-        name: "add_fridge_item",
-        description:
-          "Add one or more items to the fridge. Use when the user says they bought or still have ingredients.",
-        parameters: {
-          type: "object",
-          properties: {
+      name: "add_fridge_item",
+      strict: true,
+      description:
+        "Add one or more items to the fridge. Use when the user says they bought or still have ingredients.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          items: {
+            type: "array",
+            description: "One JSON object per item.",
             items: {
-              type: "array",
-              description: "One JSON object per item.",
-              items: {
-                type: "object",
-                properties: {
-                  item_name: {
-                    type: "string",
-                    description: "Ingredient name, singular (e.g. 'broccoli')",
-                  },
-                  meta: {
-                    type: "object",
-                    description:
-                      "Optional; only include if the user gives extra info such as category, expiry, quantity, notes.",
-                    additionalProperties: true,
-                  },
-                  expire_at: {
-                    type: "string",
-                    format: "date-time",
-                    description: "Optional; expiration date in ISO8601 format.",
-                  },
-                  note: {
-                    type: "string",
-                    description: "Optional; any note about the item.",
-                  },
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                item_name: {
+                  type: "string",
+                  description: "Ingredient name, singular (e.g. 'broccoli')",
                 },
-                required: ["item_name"],
+                expire_at: {
+                  type: "string",
+                  description: "Optional; expiration date in ISO8601 format.",
+                },
+                note: {
+                  type: "string",
+                  description: "Optional; any note about the item.",
+                },
               },
-              minItems: 1,
+              required: ["item_name", "expire_at", "note"],
             },
           },
-          required: ["items"],
         },
+        required: ["items"],
       },
     },
     {
       type: "function",
-      function: {
-        name: "record_meal",
-        description:
-          "Log a meal the user has eaten. Call when the user talks about finishing or eating a dish.",
-        parameters: {
-          type: "object",
-          properties: {
-            meal_name: {
-              type: "string",
-              description: "E.g. 'Spaghetti Bolognese', 'Grilled mackerel set'",
-            },
+      name: "record_meal",
+      strict: true,
+      description:
+        "Log a meal the user has eaten. Call when the user talks about finishing or eating a dish.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          meal_name: {
+            type: "string",
+            description: "E.g. 'Spaghetti Bolognese', 'Grilled mackerel set'",
           },
-          required: ["meal_name"],
         },
+        required: ["meal_name"],
       },
     },
     {
       type: "function",
-      function: {
-        name: "fetch_recent_items",
-        description:
-          "Retrieve the most recently added fridge items. Useful before proposing a dinner menu.",
-        parameters: {
-          type: "object",
-          properties: {
-            limit: {
-              type: "integer",
-              description: "Max rows to return (default 20).",
-            },
+      name: "fetch_recent_items",
+      strict: true,
+      description:
+        "Retrieve the most recently added fridge items. Useful before proposing a dinner menu.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          limit: {
+            type: "integer",
+            description: "Max rows to return (default 20).",
           },
         },
+        required: ["limit"],
       },
     },
     {
       type: "function",
-      function: {
-        name: "delete_fridge_item",
-        description:
-          "Delete one or more items from the fridge by their ids. Use when the user wants to remove or discard specific fridge items.",
-        parameters: {
-          type: "object",
-          properties: {
-            ids: {
-              type: "array",
-              items: { type: "integer" },
-              description: "The ids (primary keys) of the fridge items to delete.",
-              minItems: 1,
-            },
+      name: "delete_fridge_item",
+      strict: true,
+      description:
+        "Delete one or more items from the fridge by their ids. Use when the user wants to remove or discard specific fridge items.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          ids: {
+            type: "array",
+            items: { type: "integer" },
+            description:
+              "The ids (primary keys) of the fridge items to delete.",
           },
-          required: ["ids"],
         },
+        required: ["ids"],
       },
     },
   ];

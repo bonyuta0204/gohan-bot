@@ -1,11 +1,19 @@
-// ai.ts
+// client.ts
 // Shared logic for OpenAI chat-completion integration
-// Usage: import { chatCompletion } from './_shared/ai.ts';
+// Usage: import { chatCompletion } from './_shared/client.ts';
 // Uses official OpenAI npm library, reads API key from env
 
 import OpenAI from "npm:openai";
 
 import type { ChatCompletion } from "npm:openai/resources/chat/completions";
+
+export function buildOpenAIClient() {
+  const apiKey = Deno.env.get("OPENAI_API_KEY");
+  if (!apiKey) {
+    throw new Error("OPENAI_API_KEY environment variable is not set");
+  }
+  return new OpenAI({ apiKey });
+}
 
 /**
  * Calls OpenAI's chat-completion endpoint using the official OpenAI library for Deno.
