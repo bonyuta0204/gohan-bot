@@ -35,6 +35,15 @@ export function getToolSchema(): OpenAI.Chat.Completions.ChatCompletionTool[] {
                       "Optional; only include if the user gives extra info such as category, expiry, quantity, notes.",
                     additionalProperties: true,
                   },
+                  expire_at: {
+                    type: "string",
+                    format: "date-time",
+                    description: "Optional; expiration date in ISO8601 format.",
+                  },
+                  note: {
+                    type: "string",
+                    description: "Optional; any note about the item.",
+                  },
                 },
                 required: ["item_name"],
               },

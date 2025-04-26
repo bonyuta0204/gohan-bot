@@ -1,0 +1,112 @@
+# Gohan Bot Project Guide
+
+## Table of Contents
+1. [Overview & Purpose](#overview--purpose)
+2. [Project Structure](#project-structure)
+3. [Core Components](#core-components)
+4. [Good Practices](#good-practices)
+5. [Adding Functionality](#adding-functionality)
+   - [Adding a New Tool](#adding-a-new-tool)
+   - [Updating the AI Prompt](#updating-the-ai-prompt)
+6. [Testing & Deployment](#testing--deployment)
+7. [Database Schema](#database-schema)
+8. [Contributing](#contributing)
+
+---
+
+## Overview & Purpose
+Gohan Bot is a Slack-integrated dinner assistant. It helps users manage fridge items and log meals, using Supabase Edge Functions (Deno) and OpenAI's function-calling LLMs. The bot suggests dinner menus, tracks fridge inventory, and avoids recently eaten meals, all via natural language interactions in Slack.
+
+## Project Structure
+```
+├── .gitignore
+├── README.md
+├── GUIDE.md           # This guide
+├── package.json       # Node dependencies (dev only)
+├── pnpm-lock.yaml     # pnpm lockfile
+└── supabase
+    ├── config.toml
+    ├── functions
+    │   ├── _shared
+    │   │   ├── ai.ts              # OpenAI API integration
+    │   │   ├── handle_message.ts  # Pure LLM orchestration logic
+    │   │   ├── prompt.ts          # System/user prompt templates
+    │   │   └── tools
+    │   │       ├── index.ts           # Tool schemas and handlers registry
+    │   │       ├── add_fridge_item.ts # Tool: add fridge items
+    │   │       ├── fetch_recent_items.ts # Tool: fetch recent fridge items
+    │   │       └── record_meal.ts     # Tool: log a meal
+    │   ├── handle_message
+    │   │   └── index.ts           # HTTP endpoint for direct LLM testing
+    │   └── slack_mentions
+    │       └── index.ts           # Slack event handler (app_mention)
+    └── migrations                 # Supabase DB migrations
+```
+
+## Core Components
+- **Slack Integration:**
+  - `supabase/functions/slack_mentions/index.ts`: Handles Slack events, posts replies using LLM results.
+- **LLM Orchestration:**
+  - `supabase/functions/_shared/handle_message.ts`: Pure function for prompt→tool→response logic.
+  - `supabase/functions/_shared/ai.ts`: OpenAI chat-completion wrapper.
+- **Prompt Template:**
+  - `supabase/functions/_shared/prompt.ts`: System prompt for LLM, defines bot behavior and tool usage.
+- **Tools:**
+  - `supabase/functions/_shared/tools/`: Each file implements a tool (function-callable by LLM).
+    - `add_fridge_item.ts`, `fetch_recent_items.ts`, `record_meal.ts`.
+  - `index.ts`: Registers tool schemas and handlers for LLM function-calling.
+- **Database:**
+  - Uses Supabase tables: `fridge_items`, `meal_logs`.
+
+## Good Practices
+- **Single Responsibility:** Each tool should do one thing (e.g., add item, fetch items, record meal).
+- **Type Safety:** Use TypeScript types for all tool inputs/outputs. Avoid `any`.
+- **No Hallucinated Fields:** Only pass fields to DB that are present in the tool schema and code.
+- **Prompt Discipline:** Update the system prompt if you add/remove/change tool behavior.
+- **Minimal External State:** Pure functions wherever possible. Side effects (e.g., Slack posting) are isolated.
+- **Logging:** Use `console.log`/`console.error` for debugging, especially for errors in tool handlers.
+- **Testing:** Use the `handle_message` endpoint for local, direct LLM testing. No Slack signature required.
+- **Environment Management:** Store secrets in `.env.local` (dev) or Supabase secrets (prod).
+
+## Adding Functionality
+
+### Adding a New Tool
+1. Create a new file in `supabase/functions/_shared/tools/`, e.g. `my_tool.ts`.
+2. Export a function with the signature `(supabase: SupabaseClient, args: ArgsType) => Promise<ResultType>`.
+3. Add your handler to `toolHandlers` and schema to `getToolSchema()` in `index.ts`.
+4. Update the system prompt in `prompt.ts` if needed.
+5. Test via the `handle_message` HTTP endpoint.
+
+### Updating the AI Prompt
+1. Edit `supabase/functions/_shared/prompt.ts`.
+2. Follow the existing format for system instructions and tool usage.
+3. Be explicit about when and how each tool should be called.
+4. Keep instructions concise and avoid ambiguity.
+
+## Testing & Deployment
+- **Local Testing:**
+  - Start Supabase emulator: `supabase start`
+  - Serve functions: `supabase functions serve slack_mentions handle_message`
+  - Test with `curl` (see README for sample payloads)
+- **Slack Integration:**
+  - Use `ngrok` to expose local endpoint for Slack testing.
+- **Deployment:**
+  - Deploy with `supabase functions deploy <function_name>`
+  - Set secrets via `supabase secrets set` or dashboard
+- **Database Migrations:**
+  - Use `supabase migration new <name>` and `supabase migration up`
+
+## Database Schema
+- `fridge_items(user_slack_id, item_name, added_at, meta, expire_at, note)`
+- `meal_logs(user_slack_id, meal_name, eaten_at)`
+
+## Contributing
+- Fork and branch from main.
+- Follow code style and practices above.
+- Document new tools and changes in this guide.
+- Test before PR.
+- Link issues/PRs for traceability.
+
+---
+
+*Guide last updated: 2025-04-27*
