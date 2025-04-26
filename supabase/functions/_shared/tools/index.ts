@@ -1,13 +1,16 @@
 import { addFridgeItem } from "./add_fridge_item.ts";
 import { recordMeal } from "./record_meal.ts";
 import { fetchRecentItems } from "./fetch_recent_items.ts";
+import { deleteFridgeItem } from "./delete_fridge_item.ts";
 import OpenAI from "npm:openai";
 
 export const toolHandlers = {
   add_fridge_item: addFridgeItem,
   record_meal: recordMeal,
   fetch_recent_items: fetchRecentItems,
+  delete_fridge_item: deleteFridgeItem,
 };
+
 export function getToolSchema(): OpenAI.Chat.Completions.ChatCompletionTool[] {
   return [
     {
@@ -86,6 +89,26 @@ export function getToolSchema(): OpenAI.Chat.Completions.ChatCompletionTool[] {
               description: "Max rows to return (default 20).",
             },
           },
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "delete_fridge_item",
+        description:
+          "Delete one or more items from the fridge by their ids. Use when the user wants to remove or discard specific fridge items.",
+        parameters: {
+          type: "object",
+          properties: {
+            ids: {
+              type: "array",
+              items: { type: "integer" },
+              description: "The ids (primary keys) of the fridge items to delete.",
+              minItems: 1,
+            },
+          },
+          required: ["ids"],
         },
       },
     },

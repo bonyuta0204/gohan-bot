@@ -6,7 +6,7 @@ export async function fetchRecentItems(
 ) {
   const { data, error } = await supabase
     .from("fridge_items")
-    .select("item_name,added_at,meta,expire_at,note")
+    .select("id,item_name,added_at,meta,expire_at,note")
     .order("added_at", { ascending: false })
     .limit(args.limit || 5);
   if (error) {
