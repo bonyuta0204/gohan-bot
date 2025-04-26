@@ -4,6 +4,7 @@
 import { chatCompletion } from "./ai.ts";
 import type { SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import { getToolSchema, toolHandlers } from "./tools/index.ts";
+import { SYSTEM_PROMPT } from "./prompt.ts";
 
 export type HandleMessageRequest = {
   userMessage: string;
@@ -29,8 +30,7 @@ export async function handleMessage(
     const { userMessage } = req;
     const systemMsg = {
       role: "system",
-      content:
-        "You are a helpful cooking assistant. Use available functions to manage fridge items and log meals.",
+      content: SYSTEM_PROMPT,
     } as const;
     const userMsg = {
       role: "user",
@@ -40,49 +40,61 @@ export async function handleMessage(
 
     // First LLM call with function schema
     const firstResp = await chatCompletion({
-      model: "gpt-4o-mini",
+      model: "gpt-4.1-nano",
       messages: [systemMsg, userMsg],
       tools,
       tool_choice: "auto",
     });
+    console.log("First LLM response:", firstResp);
     const choice = firstResp.choices[0];
     let finalText: string;
-    if (choice.message?.tool_calls?.length) {
-      const toolCall = choice.message.tool_calls[0];
-      const name = toolCall.function.name;
-      const argsJson = toolCall.function.arguments;
 
-      console.log("Tool call:", name, argsJson);
-      const args = JSON.parse(argsJson || "{}");
-      let functionResult: unknown;
-      if (name in toolHandlers) {
+    let toolResults: Record<string, unknown> = {};
+    let toolMsgs: any[] = [];
+    if (choice.message?.tool_calls?.length) {
+      for (const toolCall of choice.message.tool_calls) {
+        const name = toolCall.function.name;
+        let args = {};
         try {
-          functionResult = await toolHandlers
-            [name as keyof typeof toolHandlers](
+          args = JSON.parse(toolCall.function.arguments || "{}");
+        } catch {
+          args = {};
+        }
+        let result: unknown;
+        if (name in toolHandlers) {
+          try {
+            result = await toolHandlers[name as keyof typeof toolHandlers](
               supabase,
               args,
             );
-        } catch (toolError) {
-          console.error("Tool handler error:", toolError);
-          functionResult = {
-            status: "error",
-            detail: `Tool '${name}' failed: ${
-              toolError instanceof Error ? toolError.message : String(toolError)
-            }`,
-          };
+            console.log(`Function result for ${name}:`, result);
+          } catch (toolError) {
+            console.error(`Tool handler error for ${name}:`, toolError);
+            result = {
+              status: "error",
+              detail: `Tool '${name}' failed: ${
+                toolError instanceof Error
+                  ? toolError.message
+                  : String(toolError)
+              }`,
+            };
+          }
+        } else {
+          result = { status: "error", detail: `Unknown tool: ${name}` };
         }
-      } else {
-        functionResult = { status: "error", detail: `Unknown tool: ${name}` };
+        toolResults[name] = result;
+        toolMsgs.push({
+          role: "tool",
+          tool_call_id: toolCall.id,
+          content: JSON.stringify(result),
+        });
       }
-      // Second LLM call with function result
-      const toolMsg = {
-        role: "tool",
-        tool_call_id: toolCall.id,
-        content: JSON.stringify(functionResult),
-      } as const;
+    }
+    // Second LLM call with all tool results (if any)
+    if (toolMsgs.length > 0) {
       const secondResp = await chatCompletion({
         model: "gpt-4.1-nano",
-        messages: [systemMsg, userMsg, firstResp.choices[0].message, toolMsg],
+        messages: [systemMsg, userMsg, choice.message, ...toolMsgs],
       });
       finalText = secondResp.choices[0]?.message?.content || "(No response)";
     } else {
@@ -90,6 +102,7 @@ export async function handleMessage(
     }
     return { reply: finalText };
   } catch (err) {
+    console.error("Error in handleMessage:", err);
     return {
       reply: "",
       error: (err instanceof Error ? err.message : String(err)),

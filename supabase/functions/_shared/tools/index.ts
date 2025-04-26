@@ -8,23 +8,40 @@ export const toolHandlers = {
   record_meal: recordMeal,
   fetch_recent_items: fetchRecentItems,
 };
-
 export function getToolSchema(): OpenAI.Chat.Completions.ChatCompletionTool[] {
   return [
     {
       type: "function",
       function: {
         name: "add_fridge_item",
-        description: "Add an item to the user's fridge",
+        description:
+          "Add one or more items to the fridge. Use when the user says they bought or still have ingredients.",
         parameters: {
           type: "object",
           properties: {
-            item_name: {
-              type: "string",
-              description: "Name of the item to add",
+            items: {
+              type: "array",
+              description: "One JSON object per item.",
+              items: {
+                type: "object",
+                properties: {
+                  item_name: {
+                    type: "string",
+                    description: "Ingredient name, singular (e.g. 'broccoli')",
+                  },
+                  meta: {
+                    type: "object",
+                    description:
+                      "Optional; only include if the user gives extra info such as category, expiry, quantity, notes.",
+                    additionalProperties: true,
+                  },
+                },
+                required: ["item_name"],
+              },
+              minItems: 1,
             },
           },
-          required: ["item_name"],
+          required: ["items"],
         },
       },
     },
@@ -32,11 +49,15 @@ export function getToolSchema(): OpenAI.Chat.Completions.ChatCompletionTool[] {
       type: "function",
       function: {
         name: "record_meal",
-        description: "Record a meal eaten by the user",
+        description:
+          "Log a meal the user has eaten. Call when the user talks about finishing or eating a dish.",
         parameters: {
           type: "object",
           properties: {
-            meal_name: { type: "string", description: "Name of the meal" },
+            meal_name: {
+              type: "string",
+              description: "E.g. 'Spaghetti Bolognese', 'Grilled mackerel set'",
+            },
           },
           required: ["meal_name"],
         },
@@ -46,16 +67,16 @@ export function getToolSchema(): OpenAI.Chat.Completions.ChatCompletionTool[] {
       type: "function",
       function: {
         name: "fetch_recent_items",
-        description: "Fetch recently added fridge items for the user",
+        description:
+          "Retrieve the most recently added fridge items. Useful before proposing a dinner menu.",
         parameters: {
           type: "object",
           properties: {
             limit: {
               type: "integer",
-              description: "Max number of items to fetch",
+              description: "Max rows to return (default 20).",
             },
           },
-          required: [],
         },
       },
     },
