@@ -118,19 +118,23 @@ export async function handleMessage(
       tool_choice: "auto",
     });
     console.log("First LLM response:", firstResp);
-    const output = firstResp.output[0];
     let finalText: string;
 
     // --- Tool call execution ---
-    if (output.type === "function_call") {
-      const toolMsgs = await executeToolCall(
-        output,
-        supabase,
-      );
+    const toolCallOutputs = [];
+    let hasFunctionCall = false;
+    for (const toolCall of firstResp.output) {
+      if (toolCall.type === "function_call") {
+        hasFunctionCall = true;
+        const toolMsg = await executeToolCall(toolCall, supabase);
+        toolCallOutputs.push(toolMsg);
+      }
+    }
+    if (hasFunctionCall) {
       // Second LLM call with all tool results (if any)
       const secondResp = await client.responses.create({
         model: "gpt-4.1-nano",
-        input: [systemMsg, userMsg, output, toolMsgs],
+        input: [systemMsg, userMsg, ...firstResp.output, ...toolCallOutputs],
       });
       finalText = secondResp.output_text || "(No response)";
     } else {
