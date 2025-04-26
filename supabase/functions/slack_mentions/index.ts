@@ -36,7 +36,7 @@ Deno.serve(async (req) => {
         status: 200,
       });
     } else if (event && event.type == "app_mention") {
-      await onAppMention(event);
+      onAppMention(event);
 
       return new Response("", { status: 200 });
     } else {
@@ -52,20 +52,14 @@ Deno.serve(async (req) => {
   }
 });
 
-async function onAppMention(
-  event: { channel: string; thread_ts: string; text: string },
+function onAppMention(
+  event: { channel: string; ts: string; text: string },
 ) {
   console.log(
-    `App mention event: channel=${event.channel}, thread_ts=${event.thread_ts}`,
+    `App mention event: channel=${event.channel}, thread_ts=${event.ts}`,
   );
   // We post to Slack in a background task since LLM calls are slow
-  EdgeRuntime.waitUntil(postReply(event.text, event.channel, event.thread_ts));
-  await postSlack(
-    event.channel,
-    event.thread_ts,
-    `Taking a look and will get back to you shortly!`,
-  );
-  console.log("Posted reply to Slack thread");
+  EdgeRuntime.waitUntil(postReply(event.text, event.channel, event.ts));
 }
 
 /**
@@ -74,7 +68,7 @@ async function onAppMention(
 async function postReply(
   userMessage: string,
   channel: string,
-  thread_ts: string,
+  ts: string,
 ): Promise<void> {
   console.log(`Generating response to user message: ${userMessage}`);
   try {
@@ -87,7 +81,7 @@ async function postReply(
     if (!message) {
       throw new Error("Failed to get response from LLM");
     }
-    await postSlack(channel, thread_ts, message);
+    await postSlack(channel, ts, message);
   } catch (err) {
     console.error("Error generating response", err);
   }
@@ -95,16 +89,16 @@ async function postReply(
 
 async function postSlack(
   channel: string,
-  thread_ts: string,
+  ts: string,
   message: string,
 ): Promise<void> {
   console.log(
-    `Posting message to Slack: channel=${channel}, thread_ts=${thread_ts}`,
+    `Posting message to Slack: channel=${channel}, thread_ts=${ts}`,
   );
   try {
     const result = await bot_client.chat.postMessage({
       channel: channel,
-      thread_ts: thread_ts,
+      thread_ts: ts,
       text: message,
     });
     console.log("Slack postMessage result", result);
