@@ -317,3 +317,14 @@ entrypoint = "./functions/slack_mentions/index.ts"
 # Specifies static files to be bundled with the function. Supports glob patterns.
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/slack_mentions/*.html" ]
+
+[functions.handle_message]
+enabled = true
+verify_jwt = true
+import_map = "./functions/handle_message/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/handle_message/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/handle_message/*.html" ]

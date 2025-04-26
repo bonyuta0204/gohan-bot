@@ -8,6 +8,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { WebClient } from "https://deno.land/x/slack_web_api@6.7.2/mod.js";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { chatCompletion } from "../_shared/ai.ts";
+import { handleMessage } from "../_shared/handle_message.ts";
 
 const slack_bot_token = Deno.env.get("SLACK_TOKEN") ?? "";
 const bot_client = new WebClient(slack_bot_token);
@@ -72,16 +73,11 @@ async function postReply(
 ): Promise<void> {
   console.log(`Generating response to user message: ${userMessage}`);
   try {
-    const response = await chatCompletion({
-      messages: [
-        { role: "user", content: userMessage },
-      ],
-    });
-    const message = response.choices[0].message.content;
-    if (!message) {
-      throw new Error("Failed to get response from LLM");
+    const { reply, error } = await handleMessage({ userMessage });
+    if (error || !reply) {
+      throw new Error(error || "Failed to get response from LLM");
     }
-    await postSlack(channel, ts, message);
+    await postSlack(channel, ts, reply);
   } catch (err) {
     console.error("Error generating response", err);
   }
