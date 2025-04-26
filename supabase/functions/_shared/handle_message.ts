@@ -57,15 +57,18 @@ export async function handleMessage(
       let functionResult: unknown;
       if (name in toolHandlers) {
         try {
-          functionResult = await toolHandlers[name as keyof typeof toolHandlers](
-            supabase,
-            args,
-          );
+          functionResult = await toolHandlers
+            [name as keyof typeof toolHandlers](
+              supabase,
+              args,
+            );
         } catch (toolError) {
           console.error("Tool handler error:", toolError);
           functionResult = {
             status: "error",
-            detail: `Tool '${name}' failed: ${toolError instanceof Error ? toolError.message : String(toolError)}`,
+            detail: `Tool '${name}' failed: ${
+              toolError instanceof Error ? toolError.message : String(toolError)
+            }`,
           };
         }
       } else {
@@ -78,7 +81,7 @@ export async function handleMessage(
         content: JSON.stringify(functionResult),
       } as const;
       const secondResp = await chatCompletion({
-        model: "gpt-4o-mini",
+        model: "gpt-4.1-nano",
         messages: [systemMsg, userMsg, firstResp.choices[0].message, toolMsg],
       });
       finalText = secondResp.choices[0]?.message?.content || "(No response)";
