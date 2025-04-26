@@ -49,7 +49,6 @@ sequenceDiagram
 - Deno (v1.40+) installed
 - A Supabase project with:
   - Edge Functions enabled
-  - Secrets: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
 - A Slack App with scopes: `chat:write`, `app_mentions:read`
 - OpenAI API key (`OPENAI_API_KEY`)
 
@@ -67,10 +66,7 @@ sequenceDiagram
 3. Set environment variables (locally in `.env` or via Supabase secrets):
    ```bash
    supabase secrets set \
-     SUPABASE_URL=<your_supabase_url> \
-     SUPABASE_SERVICE_ROLE_KEY=<service_role_key> \
      SLACK_TOKEN=<bot_token> \
-     SLACK_SIGNING_SECRET=<signing_secret> \
      OPENAI_API_KEY=<openai_api_key>
    ```
 4. Open in VS Code (with Deno extension) for IntelliSense.
@@ -87,11 +83,17 @@ sequenceDiagram
    ```
 3. Test via `curl`:
    ```bash
-   # Test handle_message
+   # Test handle_message (recommended for local testing, bypasses Slack)
    curl http://127.0.0.1:54321/functions/v1/handle_message \
      -H "Content-Type: application/json" \
      --data '{"userMessage":"Add milk to fridge"}'
+   # Sample request body for handle_message:
+   # {
+   #   "userMessage": "Add milk to fridge",
+   #   "userSlackId": "U12345678"  # optional, for user-specific operations
+   # }
    ```
+   > **Tip:** Using `handle_message` directly is the easiest way to test logic locally, as it does not require Slack integration or signature verification.
 4. (Optional) Expose to Slack with `ngrok`:
    ```bash
    ngrok http 54321
@@ -106,23 +108,27 @@ sequenceDiagram
    supabase functions deploy slack_mentions
    supabase functions deploy handle_message
    ```
-3. Apply database schema (via SQL editor or `psql`):
-   ```sql
-   create table if not exists fridge_items (
-     id bigserial primary key,
-     user_slack_id text not null,
-     item_name text not null,
-     added_at timestamptz default now()
-   );
+3. Invite the bot to your Slack channel and mention it to start.
 
-   create table if not exists meal_logs (
-     id bigserial primary key,
-     user_slack_id text not null,
-     meal_name text not null,
-     eaten_at date default current_date
-   );
+## Database Migrations
+
+We use Supabase migrations for schema management. To create and apply migrations:
+
+1. Create a new migration file:
+   ```bash
+   supabase migration new <migration_name>
    ```
-4. Invite the bot to your Slack channel and mention it to start.
+2. Edit the generated SQL file in `supabase/migrations/` as needed.
+3. Apply migrations locally:
+   ```bash
+   supabase migration up
+   ```
+4. To push migrations to your remote Supabase project:
+   ```bash
+   supabase db push
+   ```
+
+See the [Supabase migration docs](https://supabase.com/docs/guides/deployment/database-migrations) for more details and best practices.
 
 ## Database Schema
 
@@ -141,4 +147,4 @@ Tables:
 - User-specific preferences and settings
 
 ## License
-MIT © 2025 bonyuta0204
+MIT 2025 bonyuta0204

@@ -7,7 +7,6 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 import { WebClient } from "https://deno.land/x/slack_web_api@6.7.2/mod.js";
 import { createClient } from "jsr:@supabase/supabase-js@2";
-import { chatCompletion } from "../_shared/ai.ts";
 import { handleMessage } from "../_shared/handle_message.ts";
 
 const slack_bot_token = Deno.env.get("SLACK_TOKEN") ?? "";
@@ -15,15 +14,6 @@ const bot_client = new WebClient(slack_bot_token);
 
 Deno.serve(async (req) => {
   try {
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_ANON_KEY") ?? "",
-      {
-        global: {
-          headers: { Authorization: req.headers.get("Authorization")! },
-        },
-      },
-    );
     const req_body = await req.json();
 
     const { challenge, type, event } = req_body;
