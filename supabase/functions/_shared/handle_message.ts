@@ -1,19 +1,10 @@
 // handle_message.ts
 // Pure function to generate a reply using LLM, matching logic in slack_mentions/postReply
 
+import OpenAI from "npm:openai";
 import { chatCompletion } from "./ai.ts";
 import type { SupabaseClient } from "jsr:@supabase/supabase-js@2";
-
-// Inline types for OpenAI Chat Completion messages (based on OpenAI SDK and docs)
-type ChatCompletionMessageParam =
-  | { role: "system" | "user" | "assistant"; content: string; name?: string }
-  | { role: "function"; name: string; content: string };
-type ChatCompletionFunctionMessageParam = {
-  role: "function";
-  name: string;
-  content: string;
-};
-type ChatCompletionMessageToolCall = { name: string; arguments: string };
+import { ChatCompletionFunctionMessageParam } from "npm:openai";
 
 export type HandleMessageRequest = {
   userMessage: string;
@@ -37,15 +28,15 @@ export async function handleMessage(
 ): Promise<HandleMessageResponse> {
   try {
     const { userMessage } = req;
-    const systemMsg: ChatCompletionMessageParam = {
+    const systemMsg = {
       role: "system",
       content:
         "You are a helpful cooking assistant. Use available functions to manage fridge items and log meals.",
-    };
-    const userMsg: ChatCompletionMessageParam = {
+    } as const;
+    const userMsg = {
       role: "user",
       content: userMessage,
-    };
+    } as const;
     const tools = getToolSchema();
 
     // First LLM call with function schema
@@ -59,8 +50,10 @@ export async function handleMessage(
     let finalText: string;
     if (choice.message?.tool_calls?.length) {
       const toolCall = choice.message.tool_calls[0];
-      const name = (toolCall as ChatCompletionMessageToolCall).name;
-      const argsJson = (toolCall as ChatCompletionMessageToolCall).arguments;
+      const name = toolCall.function.name;
+      const argsJson = toolCall.function.arguments;
+
+      console.log("Tool call:", name, argsJson);
       const args = JSON.parse(argsJson || "{}");
       let functionResult: unknown;
       if (name === "add_fridge_item") {
@@ -88,14 +81,14 @@ export async function handleMessage(
         functionResult = { items: data };
       }
       // Second LLM call with function result
-      const functionMsg: ChatCompletionFunctionMessageParam = {
-        role: "function",
-        name,
+      const toolMsg = {
+        role: "tool",
+        tool_call_id: toolCall.id,
         content: JSON.stringify(functionResult),
-      };
+      } as const;
       const secondResp = await chatCompletion({
         model: "gpt-4o-mini",
-        messages: [systemMsg, userMsg, functionMsg],
+        messages: [systemMsg, userMsg, firstResp.choices[0].message, toolMsg],
       });
       finalText = secondResp.choices[0]?.message?.content || "(No response)";
     } else {
@@ -111,42 +104,54 @@ export async function handleMessage(
 }
 
 // Tool schemas for function calling
-function getToolSchema() {
+function getToolSchema(): OpenAI.Chat.Completions.ChatCompletionTool[] {
   return [
     {
-      name: "add_fridge_item",
-      description: "Add an item to the user's fridge",
-      parameters: {
-        type: "object",
-        properties: {
-          item_name: { type: "string", description: "Name of the item to add" },
-        },
-        required: ["item_name"],
-      },
-    },
-    {
-      name: "record_meal",
-      description: "Record a meal eaten by the user",
-      parameters: {
-        type: "object",
-        properties: {
-          meal_name: { type: "string", description: "Name of the meal" },
-        },
-        required: ["meal_name"],
-      },
-    },
-    {
-      name: "fetch_recent_items",
-      description: "Fetch recently added fridge items for the user",
-      parameters: {
-        type: "object",
-        properties: {
-          limit: {
-            type: "integer",
-            description: "Max number of items to fetch",
+      type: "function",
+      function: {
+        name: "add_fridge_item",
+        description: "Add an item to the user's fridge",
+        parameters: {
+          type: "object",
+          properties: {
+            item_name: {
+              type: "string",
+              description: "Name of the item to add",
+            },
           },
+          required: ["item_name"],
         },
-        required: [],
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "record_meal",
+        description: "Record a meal eaten by the user",
+        parameters: {
+          type: "object",
+          properties: {
+            meal_name: { type: "string", description: "Name of the meal" },
+          },
+          required: ["meal_name"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "fetch_recent_items",
+        description: "Fetch recently added fridge items for the user",
+        parameters: {
+          type: "object",
+          properties: {
+            limit: {
+              type: "integer",
+              description: "Max number of items to fetch",
+            },
+          },
+          required: [],
+        },
       },
     },
   ];
