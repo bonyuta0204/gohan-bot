@@ -21,7 +21,7 @@ Gohan Bot is a Slack-integrated dinner assistant. It helps users manage fridge i
 ```
 ├── .gitignore
 ├── README.md
-├── GUIDE.md           # This guide
+├── .windsurfrules     # This guide
 ├── package.json       # Node dependencies (dev only)
 ├── pnpm-lock.yaml     # pnpm lockfile
 └── supabase
