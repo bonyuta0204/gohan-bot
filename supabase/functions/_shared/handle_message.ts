@@ -5,6 +5,7 @@ import { buildOpenAIClient } from "./client.ts";
 import type { SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import { getToolSchema, toolHandlers } from "./tools/index.ts";
 import { SYSTEM_PROMPT } from "./prompt.ts";
+import { OPENAI_MODEL } from "./model.ts";
 import OpenAI from "npm:openai";
 
 export type HandleMessageRequest = {
@@ -153,7 +154,7 @@ export async function handleMessage(
     console.log("Messages before LLM:", messages);
     // First LLM call with function schema
     const firstResp = await client.responses.create({
-      model: "gpt-4.1-nano",
+      model: OPENAI_MODEL,
       input: messages,
       tools,
       tool_choice: "auto",
@@ -177,7 +178,7 @@ export async function handleMessage(
     if (hasFunctionCall) {
       // Second LLM call with all tool results (if any)
       const secondResp = await client.responses.create({
-        model: "gpt-4.1-nano",
+        model: OPENAI_MODEL,
         store: true,
         previous_response_id: firstResp.id,
         input: [...toolCallOutputs],

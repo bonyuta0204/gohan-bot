@@ -2,7 +2,6 @@ import type { SupabaseClient } from "jsr:@supabase/supabase-js@2";
 
 export type FridgeItemInput = {
   item_name: string;
-  meta?: Record<string, unknown>;
   expire_at?: string | null; // ISO8601 string or null
   note?: string | null;
 };
@@ -20,7 +19,6 @@ export async function addFridgeItem(
   // Prepare items for insertion
   const insertItems = args.items.map((item) => ({
     item_name: item.item_name,
-    meta: item.meta ?? null,
     expire_at: item.expire_at ?? null,
     note: item.note ?? null,
   }));

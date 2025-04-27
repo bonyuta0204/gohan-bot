@@ -24,7 +24,6 @@ export function buildOpenAIClient() {
  */
 export async function chatCompletion({
   messages,
-  model = "gpt-4.1-nano",
   ...options
 }: OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming): Promise<
   ChatCompletion
@@ -35,7 +34,6 @@ export async function chatCompletion({
   }
   const openai = new OpenAI({ apiKey });
   const response = await openai.chat.completions.create({
-    model,
     messages,
     ...options,
   });

@@ -7,7 +7,11 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 import { WebClient } from "https://deno.land/x/slack_web_api@6.7.2/mod.js";
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { Image } from "https://deno.land/x/imagescript@1.2.15/mod.ts";
+
 import { handleMessage } from "../_shared/handle_message.ts";
+
+import { encodeBase64 } from "jsr:@std/encoding/base64";
 
 const slack_bot_token = Deno.env.get("SLACK_TOKEN") ?? "";
 const bot_client = new WebClient(slack_bot_token);
@@ -15,6 +19,7 @@ const bot_client = new WebClient(slack_bot_token);
 // Type for incoming Slack file objects
 interface SlackFile {
   url_private: string;
+  url_private_download?: string;
   mimetype: string;
   name: string;
 }
@@ -68,18 +73,15 @@ function onAppMention(
       if (event.files && Array.isArray(event.files)) {
         for (const file of event.files) {
           if (file.mimetype && file.mimetype.startsWith("image/")) {
-            const resp = await fetch(file.url_private, {
-              headers: { Authorization: `Bearer ${slack_bot_token}` },
-            });
-            const arrayBuffer = await resp.arrayBuffer();
-            const uint8 = new Uint8Array(arrayBuffer);
-            const binary = Array.from(uint8).map(b => String.fromCharCode(b)).join('');
-            const base64 = btoa(binary);
-            const dataUrl = `data:${file.mimetype};base64,${base64}`;
-            images.push(dataUrl);
+            const resp = await slackFileToDataUrl(file);
+            if (resp) {
+              images.push(resp);
+            }
           }
         }
         await postReply(event.text, event.channel, threadTs, images);
+      } else {
+        await postReply(event.text, event.channel, threadTs);
       }
     })(),
   );
@@ -141,4 +143,33 @@ async function postSlack(
   } catch (e) {
     console.error("Error posting message to Slack", e);
   }
+}
+
+const SUPPORTED = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+
+async function slackFileToDataUrl(file: SlackFile): Promise<string | null> {
+  const r = await fetch(file.url_private_download ?? file.url_private, {
+    headers: { Authorization: `Bearer ${slack_bot_token}` },
+  });
+  if (!r.ok) {
+    console.error("Slack download failed", r.status);
+    return null;
+  }
+
+  const buf = new Uint8Array(await r.arrayBuffer());
+  console.log("First 8 bytes of buffer", buf.slice(0, 8));
+
+  let mime = file.mimetype;
+
+  console.log("Slack file MIME type:", mime);
+
+  // Convert if the MIME type isn’t supported
+  if (!SUPPORTED.includes(mime)) {
+    const img = await Image.decode(buf); // imagescript decodes most formats
+    const png = await img.encode();
+    mime = "image/png";
+    return `data:${mime};base64,${encodeBase64(png)}`;
+  }
+
+  return `data:${mime};base64,${encodeBase64(buf)}`;
 }

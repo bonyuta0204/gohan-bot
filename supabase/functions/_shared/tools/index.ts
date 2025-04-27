@@ -2,6 +2,7 @@ import { addFridgeItem } from "./add_fridge_item.ts";
 import { recordMeal } from "./record_meal.ts";
 import { fetchRecentItems } from "./fetch_recent_items.ts";
 import { deleteFridgeItem } from "./delete_fridge_item.ts";
+import { updateFridgeItem } from "./update_fridge_item.ts";
 import OpenAI from "npm:openai";
 
 export const toolHandlers = {
@@ -9,6 +10,7 @@ export const toolHandlers = {
   record_meal: recordMeal,
   fetch_recent_items: fetchRecentItems,
   delete_fridge_item: deleteFridgeItem,
+  update_fridge_item: updateFridgeItem,
 };
 
 export function getToolSchema(): OpenAI.Responses.Tool[] {
@@ -104,6 +106,36 @@ export function getToolSchema(): OpenAI.Responses.Tool[] {
           },
         },
         required: ["ids"],
+      },
+    },
+    {
+      type: "function",
+      name: "update_fridge_item",
+      strict: true,
+      description:
+        "Update an existing fridge item by id. Use when the user wants to change the name, expiration, note, or meta of an existing item.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          id: {
+            type: "integer",
+            description: "The id (primary key) of the fridge item to update.",
+          },
+          item_name: {
+            type: ["string", "null"],
+            description: "New ingredient name, if changing.",
+          },
+          expire_at: {
+            type: ["string", "null"],
+            description: "New expiration date in ISO8601 format, if changing.",
+          },
+          note: {
+            type: ["string", "null"],
+            description: "New note, if changing.",
+          },
+        },
+        required: ["id", "item_name", "expire_at", "note"],
       },
     },
   ];
