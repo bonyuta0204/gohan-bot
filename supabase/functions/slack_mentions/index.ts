@@ -76,7 +76,10 @@ async function postReply(
         },
       },
     );
-    const { reply, error } = await handleMessage({ userMessage }, supabase);
+    const { reply, error } = await handleMessage({
+      userMessage,
+      conversationId: ts,
+    }, supabase);
     if (error || !reply) {
       throw new Error(error || "Failed to get response from LLM");
     }
