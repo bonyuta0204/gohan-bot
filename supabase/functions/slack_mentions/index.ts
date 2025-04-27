@@ -44,13 +44,12 @@ Deno.serve(async (req) => {
 });
 
 function onAppMention(
-  event: { channel: string; ts: string; text: string },
+  event: { channel: string; ts: string; text: string; thread_ts?: string },
 ) {
-  console.log(
-    `App mention event: channel=${event.channel}, thread_ts=${event.ts}`,
-  );
+  console.log(`App mention event received: event=${JSON.stringify(event)}`);
+  const threadTs = event.thread_ts ?? event.ts;
   // We post to Slack in a background task since LLM calls are slow
-  EdgeRuntime.waitUntil(postReply(event.text, event.channel, event.ts));
+  EdgeRuntime.waitUntil(postReply(event.text, event.channel, threadTs));
 }
 
 /**
