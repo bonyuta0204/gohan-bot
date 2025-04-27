@@ -1,7 +1,7 @@
 // handle_message.ts
 // Pure function to generate a reply using LLM, matching logic in slack_mentions/postReply
 
-import { buildOpenAIClient, chatCompletion } from "./client.ts";
+import { buildOpenAIClient } from "./client.ts";
 import type { SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import { getToolSchema, toolHandlers } from "./tools/index.ts";
 import { SYSTEM_PROMPT } from "./prompt.ts";
@@ -9,6 +9,7 @@ import OpenAI from "npm:openai";
 
 export type HandleMessageRequest = {
   userMessage: string;
+  conversationId?: string;
 };
 
 export type HandleMessageResponse = {
@@ -81,6 +82,15 @@ async function executeToolCall(
   };
 }
 
+type AiConversationHistory = {
+  id?: number;
+  message_text: string;
+  ai_response: string;
+  response_id: string;
+  conversation_id: string | null;
+  created_at: string;
+};
+
 /**
  * Main function to handle a user message.
  * @param req Message request
@@ -103,11 +113,30 @@ export async function handleMessage(
     } as const;
     const tools = getToolSchema();
 
+    let lastConversation: AiConversationHistory | null = null;
+    if (req.conversationId) {
+      lastConversation = await getAiConversationHistory(
+        supabase,
+        req.conversationId,
+      );
+      console.log("Last conversation:", lastConversation);
+    }
+
+    const messages: OpenAI.Responses.ResponseInputItem[] = [];
+
+    if (!lastConversation) {
+      // We don't need system message when there are existing conversations
+      messages.push(systemMsg);
+    }
+
     // --- Inject fridge items context before first LLM call ---
     const fridgeMsg = await getFridgeContextMessage(supabase);
-    const messages = fridgeMsg.content
-      ? [systemMsg, fridgeMsg, userMsg]
-      : [systemMsg, userMsg];
+
+    if (fridgeMsg.content) {
+      messages.push(fridgeMsg);
+    }
+
+    messages.push(userMsg);
 
     console.log("Messages before LLM:", messages);
     // First LLM call with function schema
@@ -116,9 +145,12 @@ export async function handleMessage(
       input: messages,
       tools,
       tool_choice: "auto",
+      store: true,
+      previous_response_id: lastConversation?.response_id ?? null,
     });
     console.log("First LLM response:", firstResp);
     let finalText: string;
+    let finalRespId: string;
 
     // --- Tool call execution ---
     const toolCallOutputs = [];
@@ -134,12 +166,24 @@ export async function handleMessage(
       // Second LLM call with all tool results (if any)
       const secondResp = await client.responses.create({
         model: "gpt-4.1-nano",
-        input: [systemMsg, userMsg, ...firstResp.output, ...toolCallOutputs],
+        store: true,
+        input: [...messages, ...firstResp.output, ...toolCallOutputs],
       });
+      finalRespId = secondResp.id;
       finalText = secondResp.output_text || "(No response)";
     } else {
+      finalRespId = firstResp.id;
       finalText = firstResp.output_text || "(No response)";
     }
+
+    const aiConversationHistory: AiConversationHistory = {
+      message_text: userMessage,
+      ai_response: finalText,
+      response_id: finalRespId,
+      conversation_id: req.conversationId ?? null,
+      created_at: new Date().toISOString(),
+    };
+    await createAiConversationHistory(supabase, aiConversationHistory);
     return { reply: finalText };
   } catch (err) {
     console.error("Error in handleMessage:", err);
@@ -148,4 +192,40 @@ export async function handleMessage(
       error: (err instanceof Error ? err.message : String(err)),
     };
   }
+}
+
+async function createAiConversationHistory(
+  supabase: SupabaseClient,
+  aiConversationHistory: AiConversationHistory,
+) {
+  const { error } = await supabase.from("ai_conversation_history").insert(
+    [aiConversationHistory],
+  );
+  if (error) {
+    throw new Error(
+      `Failed to create AI conversation history: ${error.message}`,
+    );
+  }
+}
+
+/**
+ * Get last conversation history given conversation id
+ */
+async function getAiConversationHistory(
+  supabase: SupabaseClient,
+  conversationId: string,
+): Promise<AiConversationHistory | null> {
+  const { data, error } = await supabase
+    .from("ai_conversation_history")
+    .select("*")
+    .eq("conversation_id", conversationId)
+    .order("id", { ascending: false })
+    .limit(1);
+  if (error) {
+    throw new Error(`Failed to get AI conversation history: ${error.message}`);
+  }
+  if (data.length === 0) {
+    return null;
+  }
+  return data[0];
 }
