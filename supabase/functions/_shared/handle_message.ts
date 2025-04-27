@@ -127,13 +127,13 @@ export async function handleMessage(
     if (!lastConversation) {
       // We don't need system message when there are existing conversations
       messages.push(systemMsg);
-    }
 
-    // --- Inject fridge items context before first LLM call ---
-    const fridgeMsg = await getFridgeContextMessage(supabase);
+      // We inject fridge items context before first LLM call in new conversation
+      const fridgeMsg = await getFridgeContextMessage(supabase);
 
-    if (fridgeMsg.content) {
-      messages.push(fridgeMsg);
+      if (fridgeMsg.content) {
+        messages.push(fridgeMsg);
+      }
     }
 
     messages.push(userMsg);
@@ -167,7 +167,8 @@ export async function handleMessage(
       const secondResp = await client.responses.create({
         model: "gpt-4.1-nano",
         store: true,
-        input: [...messages, ...firstResp.output, ...toolCallOutputs],
+        previous_response_id: firstResp.id,
+        input: [...toolCallOutputs],
       });
       finalRespId = secondResp.id;
       finalText = secondResp.output_text || "(No response)";

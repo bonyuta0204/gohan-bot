@@ -35,11 +35,11 @@ export function getToolSchema(): OpenAI.Responses.Tool[] {
                   description: "Ingredient name, singular (e.g. 'broccoli')",
                 },
                 expire_at: {
-                  type: "string",
+                  type: ["string", "null"],
                   description: "Optional; expiration date in ISO8601 format.",
                 },
                 note: {
-                  type: "string",
+                  type: ["string", "null"],
                   description: "Optional; any note about the item.",
                 },
               },
@@ -79,7 +79,7 @@ export function getToolSchema(): OpenAI.Responses.Tool[] {
         additionalProperties: false,
         properties: {
           limit: {
-            type: "integer",
+            type: ["integer", "null"],
             description: "Max rows to return (default 20).",
           },
         },
