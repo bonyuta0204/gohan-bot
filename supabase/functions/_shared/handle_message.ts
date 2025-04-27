@@ -10,6 +10,7 @@ import OpenAI from "npm:openai";
 export type HandleMessageRequest = {
   userMessage: string;
   conversationId?: string;
+  images?: string[];
 };
 
 export type HandleMessageResponse = {
@@ -107,10 +108,21 @@ export async function handleMessage(
       role: "system",
       content: SYSTEM_PROMPT,
     } as const;
-    const userMsg = {
+    const userMsg: OpenAI.Responses.ResponseInputItem = {
       role: "user",
-      content: userMessage,
-    } as const;
+      content: [{ type: "input_text", text: userMessage }],
+    };
+
+    // Add image inputs if present
+    if (req.images && req.images.length > 0) {
+      for (const imageUrl of req.images) {
+        (userMsg.content as OpenAI.Responses.ResponseInputContent[]).push({
+          type: "input_image",
+          image_url: imageUrl,
+          detail: "auto",
+        });
+      }
+    }
     const tools = getToolSchema();
 
     let lastConversation: AiConversationHistory | null = null;

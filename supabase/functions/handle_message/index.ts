@@ -10,7 +10,7 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 console.log("Hello from Functions!");
 
 Deno.serve(async (req) => {
-  const { userMessage } = await req.json();
+  const { userMessage, images } = await req.json();
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
     Deno.env.get("SUPABASE_ANON_KEY") ?? "",
@@ -23,6 +23,7 @@ Deno.serve(async (req) => {
   const { reply, error } = await handleMessage({
     userMessage,
     conversationId: "test_0001",
+    images, // Pass images (base64 URLs) to handleMessage
   }, supabase);
   const data = error ? { error } : { reply };
 

@@ -12,6 +12,13 @@ import { handleMessage } from "../_shared/handle_message.ts";
 const slack_bot_token = Deno.env.get("SLACK_TOKEN") ?? "";
 const bot_client = new WebClient(slack_bot_token);
 
+// Type for incoming Slack file objects
+interface SlackFile {
+  url_private: string;
+  mimetype: string;
+  name: string;
+}
+
 Deno.serve(async (req) => {
   try {
     const req_body = await req.json();
@@ -44,12 +51,38 @@ Deno.serve(async (req) => {
 });
 
 function onAppMention(
-  event: { channel: string; ts: string; text: string; thread_ts?: string },
+  event: {
+    channel: string;
+    ts: string;
+    text: string;
+    thread_ts?: string;
+    files?: SlackFile[];
+  },
 ) {
   console.log(`App mention event received: event=${JSON.stringify(event)}`);
   const threadTs = event.thread_ts ?? event.ts;
-  // We post to Slack in a background task since LLM calls are slow
-  EdgeRuntime.waitUntil(postReply(event.text, event.channel, threadTs));
+
+  EdgeRuntime.waitUntil(
+    (async () => {
+      const images: string[] = [];
+      if (event.files && Array.isArray(event.files)) {
+        for (const file of event.files) {
+          if (file.mimetype && file.mimetype.startsWith("image/")) {
+            const resp = await fetch(file.url_private, {
+              headers: { Authorization: `Bearer ${slack_bot_token}` },
+            });
+            const arrayBuffer = await resp.arrayBuffer();
+            const uint8 = new Uint8Array(arrayBuffer);
+            const binary = Array.from(uint8).map(b => String.fromCharCode(b)).join('');
+            const base64 = btoa(binary);
+            const dataUrl = `data:${file.mimetype};base64,${base64}`;
+            images.push(dataUrl);
+          }
+        }
+        await postReply(event.text, event.channel, threadTs, images);
+      }
+    })(),
+  );
 }
 
 /**
@@ -59,6 +92,7 @@ async function postReply(
   userMessage: string,
   channel: string,
   ts: string,
+  images?: string[],
 ): Promise<void> {
   console.log(`Generating response to user message: ${userMessage}`);
   try {
@@ -78,6 +112,7 @@ async function postReply(
     const { reply, error } = await handleMessage({
       userMessage,
       conversationId: ts,
+      images, // Pass image URLs to downstream function
     }, supabase);
     if (error || !reply) {
       throw new Error(error || "Failed to get response from LLM");
@@ -100,7 +135,7 @@ async function postSlack(
     const result = await bot_client.chat.postMessage({
       channel: channel,
       thread_ts: ts,
-      text: message,
+      markdown_text: message,
     });
     console.log("Slack postMessage result", result);
   } catch (e) {
